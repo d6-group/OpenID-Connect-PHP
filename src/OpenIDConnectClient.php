@@ -255,12 +255,18 @@ class OpenIDConnectClient
     private $token_endpoint_auth_methods_supported = ['client_secret_basic'];
 
     /**
+     * @var array
+     */
+    private $request;
+
+    /**
      * @param string|null $provider_url optional
      * @param string|null $client_id optional
      * @param string|null $client_secret optional
      * @param string|null $issuer
+     * @param array|null $request
      */
-    public function __construct(string $provider_url = null, string $client_id = null, string $client_secret = null, string $issuer = null) {
+    public function __construct(string $provider_url = null, string $client_id = null, string $client_secret = null, string $issuer = null, array $request = null) {
         $this->setProviderURL($provider_url);
         if ($issuer === null) {
             $this->setIssuer($provider_url);
@@ -270,6 +276,12 @@ class OpenIDConnectClient
 
         $this->clientID = $client_id;
         $this->clientSecret = $client_secret;
+
+        if ($request === null) {
+            $this->request = $_REQUEST;
+        } else {
+            $this->request = $request;
+        }
     }
 
     /**
@@ -300,15 +312,15 @@ class OpenIDConnectClient
     public function authenticate(): bool
     {
         // Do a preemptive check to see if the provider has thrown an error from a previous redirect
-        if (isset($_REQUEST['error'])) {
-            $desc = isset($_REQUEST['error_description']) ? ' Description: ' . $_REQUEST['error_description'] : '';
-            throw new OpenIDConnectClientException('Error: ' . $_REQUEST['error'] .$desc);
+        if (isset($this->request['error'])) {
+            $desc = isset($this->request['error_description']) ? ' Description: ' . $this->request['error_description'] : '';
+            throw new OpenIDConnectClientException('Error: ' . $this->request['error'] .$desc);
         }
 
         // If we have an authorization code then proceed to request a token
-        if (isset($_REQUEST['code'])) {
+        if (isset($this->request['code'])) {
 
-            $code = $_REQUEST['code'];
+            $code = $this->request['code'];
             $token_json = $this->requestTokens($code);
 
             // Throw an error if the server returns one
@@ -320,7 +332,7 @@ class OpenIDConnectClient
             }
 
             // Do an OpenID Connect session check
-	    if (!isset($_REQUEST['state']) || ($_REQUEST['state'] !== $this->getState())) {
+	    if (!isset($this->request['state']) || ($this->request['state'] !== $this->getState())) {
                 throw new OpenIDConnectClientException('Unable to determine state');
             }
 
@@ -373,14 +385,14 @@ class OpenIDConnectClient
             throw new OpenIDConnectClientException ('Unable to verify JWT claims');
         }
 
-        if ($this->allowImplicitFlow && isset($_REQUEST['id_token'])) {
+        if ($this->allowImplicitFlow && isset($this->request['id_token'])) {
             // if we have no code but an id_token use that
-            $id_token = $_REQUEST['id_token'];
+            $id_token = $this->request['id_token'];
 
-            $accessToken = $_REQUEST['access_token'] ?? null;
+            $accessToken = $this->request['access_token'] ?? null;
 
             // Do an OpenID Connect session check
-	    if (!isset($_REQUEST['state']) || ($_REQUEST['state'] !== $this->getState())) {            
+	    if (!isset($this->request['state']) || ($this->request['state'] !== $this->getState())) {            
                 throw new OpenIDConnectClientException('Unable to determine state');
             }
 
@@ -463,8 +475,8 @@ class OpenIDConnectClient
      */
     public function verifyLogoutToken(): bool
     {
-        if (isset($_REQUEST['logout_token'])) {
-            $logout_token = $_REQUEST['logout_token'];
+        if (isset($this->request['logout_token'])) {
+            $logout_token = $this->request['logout_token'];
 
             $claims = $this->decodeJWT($logout_token, 1);
 
